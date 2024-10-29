@@ -94,40 +94,89 @@ async function detectFace() {
 }
 
 function isFaceTurned(landmarks, imageWidth) {
-    const nose = landmarks[1]; // Nose tip
-    const leftEyeX = landmarks[33].x * imageWidth; // Left eye outer corner
-    const rightEyeX = landmarks[263].x * imageWidth; // Right eye outer corner
+    if (!landmarks || landmarks.length === 0) {
+        return false;
+    }
 
-    // Calculate the midpoint between the left and right eye x-coordinates in pixels
-    const eyesMidX = (leftEyeX + rightEyeX) / 2;
+    // Let's use more points for better accuracy
+    // Left side face points (from eye to jaw)
+    const leftFacePoints = [
+        landmarks[226], // Below eye
+        landmarks[447], // Upper jaw
+        landmarks[366], // Mid jaw
+        landmarks[361], // Near chin
+        landmarks[297]  // Chin
+    ];
 
-    // Get the nose x-position in pixels
-    const noseX = nose.x * imageWidth;
+    // Right side face points (from eye to jaw)
+    const rightFacePoints = [
+        landmarks[446], // Below eye
+        landmarks[227], // Upper jaw
+        landmarks[137], // Mid jaw
+        landmarks[132], // Near chin
+        landmarks[297]  // Chin
+    ];
 
-    // Get jawline positions (adjust landmark indices as necessary)
-    const leftJawX = landmarks[5].x * imageWidth; // Left jaw corner
-    const rightJawX = landmarks[11].x * imageWidth; // Right jaw corner
+    // Calculate the horizontal spread of points on each side
+    function calculateSideSpread(points) {
+        const xCoords = points.map(p => p.x);
+        const minX = Math.min(...xCoords);
+        const maxX = Math.max(...xCoords);
+        const spread = Math.abs(maxX - minX) * imageWidth;
+        return spread;
+    }
 
-    // Calculate jaw midpoint
-    const jawMidX = (leftJawX + rightJawX) / 2;
+    const leftSpread = calculateSideSpread(leftFacePoints);
+    const rightSpread = calculateSideSpread(rightFacePoints);
 
-    // Calculate offsets
-    const noseOffset = Math.abs(noseX - eyesMidX);
-    const jawOffset = Math.abs(jawMidX - eyesMidX);
+    // Calculate distances from center point (nose) to each side
+    const noseTip = landmarks[4];  // Nose tip landmark
+    const leftMostPoint = Math.min(...leftFacePoints.map(p => p.x));
+    const rightMostPoint = Math.max(...rightFacePoints.map(p => p.x));
 
-    const threshold = imageWidth * 0.1; // Adjust this percentage based on testing
+    const leftDistance = Math.abs(noseTip.x - leftMostPoint) * imageWidth;
+    const rightDistance = Math.abs(rightMostPoint - noseTip.x) * imageWidth;
 
-    console.log("Left Eye:", leftEyeX);
-    console.log("Right Eye:", rightEyeX);
-    console.log("Nose:", noseX);
-    console.log("Jaw Midpoint:", jawMidX);
-    console.log("Nose Offset:", noseOffset);
-    console.log("Jaw Offset:", jawOffset);
-    console.log("Threshold:", threshold);
-    console.log("========================");
+    // Calculate asymmetry ratio
+    const asymmetryRatio = Math.min(leftDistance, rightDistance) /
+        Math.max(leftDistance, rightDistance);
 
-    // Combine the offsets for a more comprehensive check
-    return noseOffset > threshold || jawOffset > threshold;
+    // When head is significantly turned:
+    // Lower threshold for more sensitivity
+    const TURN_THRESHOLD = 0.65;
+
+    const isTurnedSignificantly = asymmetryRatio < TURN_THRESHOLD;
+    const turnDirection = isTurnedSignificantly ?
+        (leftDistance < rightDistance ? 'right' : 'left') : 'center';
+
+    // Detailed logging for debugging
+    console.log({
+        leftSpread: leftSpread.toFixed(2),
+        rightSpread: rightSpread.toFixed(2),
+        leftDistance: leftDistance.toFixed(2),
+        rightDistance: rightDistance.toFixed(2),
+        asymmetryRatio: asymmetryRatio.toFixed(2),
+        direction: turnDirection,
+        isTurned: isTurnedSignificantly,
+        threshold: TURN_THRESHOLD
+    });
+
+    // Alternative detection method using visibility
+    // Check if certain landmarks are hidden/visible
+    const leftEyeVisible = landmarks[33].z < 0;  // Left eye outer corner
+    const rightEyeVisible = landmarks[263].z < 0; // Right eye outer corner
+
+    // If one eye is significantly more visible than the other, head is definitely turned
+    if (leftEyeVisible && !rightEyeVisible) {
+        console.log("Right turn detected by visibility");
+        return true;
+    }
+    if (!leftEyeVisible && rightEyeVisible) {
+        console.log("Left turn detected by visibility");
+        return true;
+    }
+
+    return isTurnedSignificantly;
 }
 
 startWebcam()
