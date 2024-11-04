@@ -1,12 +1,10 @@
 import {
     FaceDetector,
-    FilesetResolver,
-    FaceLandmarker
+    FilesetResolver
 } from "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.0";
 
 
 let faceDetector;
-let faceLandMarker;
 const video = document.getElementById("webcam");
 const anomalyList = document.getElementById("anomalyList");
 
@@ -39,16 +37,6 @@ const initializeMediaPipes = async () => {
         },
         runningMode: "IMAGE"
     });
-
-    faceLandMarker = await FaceLandmarker.createFromOptions(vision, {
-        baseOptions: {
-            modelAssetPath: `https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task`,
-            delegate: "GPU"
-        },
-        outputFaceBlendshapes: false,
-        runningMode: "IMAGE",
-        numFaces: 1
-    });
 };
 
 function addAnomaly(type) {
@@ -77,6 +65,7 @@ function createCanvasElement(videoElement) {
 async function detectFace() {
     const canvas = createCanvasElement(video);
     const result = await faceDetector.detect(canvas);
+    console.log(result)
     const detections = result.detections
     
     if (detections.length === 0) {
@@ -85,98 +74,35 @@ async function detectFace() {
         addAnomaly('Multiple persons detected');
     } else {
         addAnomaly('Person detected');
-        const faceMeshResult = await faceLandMarker.detect(canvas);
 
-        if (isFaceTurned(faceMeshResult.faceLandmarks[0], canvas.width)) { 
-            addAnomaly('Looking Away');
+        if (isFaceTurned(result.detections[0])) {
+            addAnomaly('Face turned');
         }
     }
 }
 
-function isFaceTurned(landmarks, imageWidth) {
-    if (!landmarks || landmarks.length === 0) {
-        return false;
-    }
+function isFaceTurned(detection) {
+    const landmarks = detection.keypoints;
+    const imageWidth = detection.boundingBox.width;
+    const leftEyeX = landmarks[0].x * imageWidth;
+    const rightEyeX = landmarks[1].x * imageWidth;
+    const jawLeftX = landmarks[4].x * imageWidth;
+    const jawRightX = landmarks[5].x * imageWidth;
+    const faceWidth = jawRightX - jawLeftX; 
+    const faceCenterX = (jawLeftX + jawRightX) / 2;
+    
+    console.log("Jaw Left:", jawLeftX, "Jaw Right:", jawRightX);
+    console.log("Left Eye X:", leftEyeX, "Right Eye X:", rightEyeX, "Face Center X:", faceCenterX, "Face Width:", faceWidth);
 
-    // Let's use more points for better accuracy
-    // Left side face points (from eye to jaw)
-    const leftFacePoints = [
-        landmarks[226], // Below eye
-        landmarks[447], // Upper jaw
-        landmarks[366], // Mid jaw
-        landmarks[361], // Near chin
-        landmarks[297]  // Chin
-    ];
-
-    // Right side face points (from eye to jaw)
-    const rightFacePoints = [
-        landmarks[446], // Below eye
-        landmarks[227], // Upper jaw
-        landmarks[137], // Mid jaw
-        landmarks[132], // Near chin
-        landmarks[297]  // Chin
-    ];
-
-    // Calculate the horizontal spread of points on each side
-    function calculateSideSpread(points) {
-        const xCoords = points.map(p => p.x);
-        const minX = Math.min(...xCoords);
-        const maxX = Math.max(...xCoords);
-        const spread = Math.abs(maxX - minX) * imageWidth;
-        return spread;
-    }
-
-    const leftSpread = calculateSideSpread(leftFacePoints);
-    const rightSpread = calculateSideSpread(rightFacePoints);
-
-    // Calculate distances from center point (nose) to each side
-    const noseTip = landmarks[4];  // Nose tip landmark
-    const leftMostPoint = Math.min(...leftFacePoints.map(p => p.x));
-    const rightMostPoint = Math.max(...rightFacePoints.map(p => p.x));
-
-    const leftDistance = Math.abs(noseTip.x - leftMostPoint) * imageWidth;
-    const rightDistance = Math.abs(rightMostPoint - noseTip.x) * imageWidth;
-
-    // Calculate asymmetry ratio
-    const asymmetryRatio = Math.min(leftDistance, rightDistance) /
-        Math.max(leftDistance, rightDistance);
-
-    // When head is significantly turned:
-    // Lower threshold for more sensitivity
-    const TURN_THRESHOLD = 0.65;
-
-    const isTurnedSignificantly = asymmetryRatio < TURN_THRESHOLD;
-    const turnDirection = isTurnedSignificantly ?
-        (leftDistance < rightDistance ? 'right' : 'left') : 'center';
-
-    // Detailed logging for debugging
-    console.log({
-        leftSpread: leftSpread.toFixed(2),
-        rightSpread: rightSpread.toFixed(2),
-        leftDistance: leftDistance.toFixed(2),
-        rightDistance: rightDistance.toFixed(2),
-        asymmetryRatio: asymmetryRatio.toFixed(2),
-        direction: turnDirection,
-        isTurned: isTurnedSignificantly,
-        threshold: TURN_THRESHOLD
-    });
-
-    // Alternative detection method using visibility
-    // Check if certain landmarks are hidden/visible
-    const leftEyeVisible = landmarks[33].z < 0;  // Left eye outer corner
-    const rightEyeVisible = landmarks[263].z < 0; // Right eye outer corner
-
-    // If one eye is significantly more visible than the other, head is definitely turned
-    if (leftEyeVisible && !rightEyeVisible) {
-        console.log("Right turn detected by visibility");
-        return true;
-    }
-    if (!leftEyeVisible && rightEyeVisible) {
-        console.log("Left turn detected by visibility");
-        return true;
-    }
-
-    return isTurnedSignificantly;
+    const threshold = 0.15; // Slightly increased threshold
+    console.log("Distance from Left Eye to Center:", Math.abs(leftEyeX - faceCenterX));
+    console.log("Allowed Threshold:", faceWidth * threshold);
+    console.log("Is Left Eye within threshold:", Math.abs(leftEyeX - faceCenterX) < faceWidth * threshold);
+    console.log("Is Right Eye within threshold:", Math.abs(rightEyeX - faceCenterX) < faceWidth * threshold); 
+    return (
+      Math.abs(leftEyeX - faceCenterX) < faceWidth * threshold ||
+      Math.abs(rightEyeX - faceCenterX) < faceWidth * threshold
+    );
 }
 
 startWebcam()
