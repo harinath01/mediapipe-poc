@@ -1,16 +1,30 @@
 import {
-    FaceDetector,
-    FilesetResolver
-} from "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.0";
+  FaceDetector,
+  FilesetResolver,
+} from "@mediapipe/tasks-vision";
 
 class FaceDetectionApp {
-    constructor(videoElementId, anomalyListId) {
-        this.video = document.getElementById(videoElementId);
-        this.anomalyList = document.getElementById(anomalyListId);
+    video: HTMLVideoElement;
+    anomalyList: HTMLUListElement;
+    faceDetector: FaceDetector | null;
+
+    constructor(videoElementId: string, anomalyListId: string) {
+        const videoElement = document.getElementById(videoElementId);
+        const anomalyElement = document.getElementById(anomalyListId);
+
+        if (!(videoElement instanceof HTMLVideoElement)) {
+            throw new Error(`Element with ID ${videoElementId} is not a valid HTMLVideoElement.`);
+        }
+        if (!(anomalyElement instanceof HTMLUListElement)) {
+            throw new Error(`Element with ID ${anomalyListId} is not a valid HTMLUListElement.`);
+        }
+
+        this.video = videoElement;
+        this.anomalyList = anomalyElement;
         this.faceDetector = null;
     }
 
-    async initialize() {
+    async initialize(): Promise<void> {
         try {
             await this.startWebcam();
             await this.initializeMediaPipes();
@@ -20,13 +34,13 @@ class FaceDetectionApp {
         }
     }
 
-    async startWebcam() {
+    async startWebcam(): Promise<void> {
         const stream = await navigator.mediaDevices.getUserMedia({ video: {} });
         this.video.srcObject = stream;
-        this.video.play();
+        await this.video.play();
     }
 
-    async initializeMediaPipes() {
+    async initializeMediaPipes(): Promise<void> {
         const vision = await FilesetResolver.forVisionTasks(
             "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.0/wasm"
         );
@@ -39,16 +53,16 @@ class FaceDetectionApp {
         });
     }
 
-    startFaceDetection() {
+    startFaceDetection(): void {
         setInterval(() => {
             this.detectFace();
         }, 3000);
     }
 
-    createCanvasElement(videoElement) {
+    createCanvasElement(videoElement: HTMLVideoElement): HTMLCanvasElement {
         const canvas = document.createElement("canvas");
-        canvas.width = videoElement.videoWidth || videoElement.naturalWidth;
-        canvas.height = videoElement.videoHeight || videoElement.naturalHeight;
+        canvas.width = videoElement.videoWidth;
+        canvas.height = videoElement.videoHeight;
         const context = canvas.getContext("2d");
         if (context) {
             context.drawImage(videoElement, 0, 0, canvas.width, canvas.height);
@@ -58,7 +72,9 @@ class FaceDetectionApp {
         }
     }
 
-    async detectFace() {
+    async detectFace(): Promise<void> {
+        if (!this.faceDetector) return;
+        
         const canvas = this.createCanvasElement(this.video);
         const result = await this.faceDetector.detect(canvas);
         const detections = result.detections;
@@ -76,7 +92,7 @@ class FaceDetectionApp {
         }
     }
 
-    isFaceTurned(detection) {
+    isFaceTurned(detection: any): boolean {
         const landmarks = detection.keypoints;
         const imageWidth = detection.boundingBox.width;
         const leftEyeX = landmarks[0].x * imageWidth;
@@ -93,7 +109,7 @@ class FaceDetectionApp {
         );
     }
 
-    addAnomaly(type) {
+    addAnomaly(type: string): void {
         const timestamp = new Date().toLocaleTimeString();
         const li = document.createElement('li');
         li.textContent = `${timestamp}: ${type}`;
@@ -105,3 +121,4 @@ class FaceDetectionApp {
 // Instantiate and initialize the app
 const faceDetectionApp = new FaceDetectionApp("webcam", "anomalyList");
 faceDetectionApp.initialize();
+
