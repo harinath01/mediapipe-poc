@@ -19,7 +19,7 @@
     "noUnusedParameters": true,
     "noFallthroughCasesInSwitch": true,
     "noUncheckedSideEffectImports": true,
-    "types": ["vite/client", "webgl2", "offscreencanvas"]
+    "types": ["vite/client", "webgl2", "offscreencanvas", "node"]
   },
   "include": ["src"]
 }

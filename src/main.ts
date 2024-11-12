@@ -1,6 +1,5 @@
 import {FaceDetector, FaceLandmarker, FaceLandmarkerResult, FilesetResolver} from "@mediapipe/tasks-vision";
 
-
 const FACE_POINTS: number[] = [1, 33, 263, 61, 291, 199]; // Nose, eyes, mouth corners, chin
 
 // 3D model points (from MediaPipe canonical face model)
@@ -84,7 +83,6 @@ class FaceAnalyzer {
             const rvec = new cv.Mat();
             const tvec = new cv.Mat();
 
-            // Solve for pose
             cv.solvePnP(
                 modelPointsMat,
                 imagePointsMat,
@@ -216,7 +214,7 @@ class FaceDetectionApp {
             },
             runningMode: "IMAGE"
         });
-        await this.faceAnalyzer.initialize(vision);
+        // await this.faceAnalyzer.initialize(vision);
     }
 
     startFaceDetection(): void {
@@ -285,6 +283,28 @@ class FaceDetectionApp {
     }
 }
 
-// Instantiate and initialize the app
+const cvGlobalVariable: string = "cv";
+const checkForCVIntervalMs: number = 200;
+
+export const waitForCv = async () => {
+  let timeout: NodeJS.Timeout | null = null;
+  while (!window.hasOwnProperty(cvGlobalVariable)) {
+    await new Promise(resolve => {
+      if (timeout !== null) {
+        clearTimeout(timeout);
+      }
+      timeout = setTimeout(resolve, checkForCVIntervalMs);
+    });
+  }
+  if (timeout !== null) {
+    clearTimeout(timeout); // clear the last timeout when done
+  }
+}
+
+waitForCv().then(() => {
+  const faceDetectionApp = new FaceDetectionApp("webcam", "anomalyList");
+  faceDetectionApp.initialize();
+});
+
 const faceDetectionApp = new FaceDetectionApp("webcam", "anomalyList");
 faceDetectionApp.initialize();
